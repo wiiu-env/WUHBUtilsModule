@@ -41,8 +41,9 @@ WUHBUtilsApiErrorType WUU_MountBundle(const char *name, const char *path, Bundle
     auto res = romfsMount(name, path, (RomfsSource) source);
     if (res == 0) {
         mountedWUHB[name] = path;
-        *outRes           = res;
     }
+
+    *outRes = res;
 
     return WUHB_UTILS_API_ERROR_NONE;
 }
