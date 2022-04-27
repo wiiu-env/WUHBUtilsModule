@@ -1,20 +1,17 @@
 #include "FileUtils.h"
 #include "utils/FileReader.h"
 #include "utils/FileReaderCompressed.h"
+#include "utils/utils.h"
 #include <map>
-#include <mutex>
 #include <wuhb_utils/utils.h>
 #include <wums/exports.h>
 
-std::vector<FileReader *> openFiles;
+std::forward_list<std::unique_ptr<FileReader>> openFiles;
 std::map<std::string, std::string> mountedWUHB;
 std::mutex mutex;
 
 void WUHBUtils_CleanUp() {
     std::lock_guard<std::mutex> lock(mutex);
-    for (auto &file : openFiles) {
-        delete file;
-    }
     openFiles.clear();
 
     for (const auto &[name, path] : mountedWUHB) {
@@ -69,22 +66,24 @@ WUHBUtilsApiErrorType WUU_FileOpen(const char *name, uint32_t *outHandle) {
         return WUHB_UTILS_API_ERROR_INVALID_ARG;
     }
     std::lock_guard<std::mutex> lock(mutex);
-    FileReader *reader;
+    std::unique_ptr<FileReader> reader;
     std::string path   = std::string(name);
     std::string pathGZ = path + ".gz";
 
     if (CheckFile(path.c_str())) {
-        reader = new (std::nothrow) FileReader(path);
+        reader = make_unique_nothrow<FileReader>(path);
     } else if (CheckFile(pathGZ.c_str())) {
-        reader = new (std::nothrow) FileReaderCompressed(pathGZ);
+        reader = make_unique_nothrow<FileReaderCompressed>(pathGZ);
     } else {
         return WUHB_UTILS_API_ERROR_FILE_NOT_FOUND;
     }
-    if (reader == nullptr) {
+
+    if (!reader || !reader->isReady()) {
         return WUHB_UTILS_API_ERROR_NO_MEMORY;
     }
-    openFiles.push_back(reader);
-    *outHandle = (uint32_t) reader;
+    *outHandle = reader->getHandle();
+    openFiles.push_front(std::move(reader));
+
     return WUHB_UTILS_API_ERROR_NONE;
 }
 
@@ -93,43 +92,22 @@ WUHBUtilsApiErrorType WUU_FileRead(uint32_t handle, uint8_t *buffer, uint32_t si
         return WUHB_UTILS_API_ERROR_INVALID_ARG;
     }
     std::lock_guard<std::mutex> lock(mutex);
-    auto found = false;
-    FileReader *reader;
-    for (auto &cur : openFiles) {
-        if ((uint32_t) cur == handle) {
-            found  = true;
-            reader = cur;
-            break;
+    for (auto &reader : openFiles) {
+        if ((uint32_t) reader.get() == (uint32_t) handle) {
+            *outRes = (int32_t) reader->read(buffer, size);
+            return WUHB_UTILS_API_ERROR_NONE;
         }
     }
-    if (!found) {
-        return WUHB_UTILS_API_ERROR_FILE_HANDLE_NOT_FOUND;
-    }
 
-    *outRes = (int32_t) reader->read(buffer, size);
-
-    return WUHB_UTILS_API_ERROR_NONE;
+    return WUHB_UTILS_API_ERROR_FILE_HANDLE_NOT_FOUND;
 }
 
 WUHBUtilsApiErrorType WUU_FileClose(uint32_t handle) {
-    std::lock_guard<std::mutex> lock(mutex);
-    auto count = 0;
-    auto found = false;
-    FileReader *reader;
-    for (auto &cur : openFiles) {
-        if ((uint32_t) cur == handle) {
-            found  = true;
-            reader = cur;
-            break;
-        }
-        count++;
+    if (remove_locked_first_if(mutex, openFiles, [handle](auto &cur) { return cur->getHandle() == handle; })) {
+        return WUHB_UTILS_API_ERROR_NONE;
     }
-    if (!found) {
-        return WUHB_UTILS_API_ERROR_FILE_HANDLE_NOT_FOUND;
-    }
-    openFiles.erase(openFiles.begin() + count);
-    delete reader;
-    return WUHB_UTILS_API_ERROR_NONE;
+
+    return WUHB_UTILS_API_ERROR_FILE_HANDLE_NOT_FOUND;
 }
 
 WUHBUtilsApiErrorType WUU_FileExists(const char *name, int32_t *outRes) {
