@@ -137,8 +137,12 @@ WUHBUtilsApiErrorType WUU_GetRPXInfo(const char *path, BundleSource source, WUHB
     return WUHB_UTILS_API_ERROR_NONE;
 }
 
-uint32_t WUU_GetVersion() {
-    return WUHB_UTILS_MODULE_VERSION;
+WUHBUtilsApiErrorType WUU_GetVersion(WUHBUtilsVersion *outVersion) {
+    if (!outVersion) {
+        return WUHB_UTILS_API_ERROR_INVALID_ARG;
+    }
+    *outVersion = 1;
+    return WUHB_UTILS_API_ERROR_NONE;
 }
 
 WUMS_EXPORT_FUNCTION(WUU_MountBundle);
