@@ -133,15 +133,6 @@ $(OUTPUT).elf	:   $(OFILES)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
-
-#-------------------------------------------------------------------------------
-# you need a rule like this for each extension you use as binary data
-#-------------------------------------------------------------------------------
-%.o: %.def
-	$(SILENTMSG) $(notdir $<)
-	$(SILENTCMD)rplimportgen $< $*.s $*.ld $(ERROR_FILTER)
-	$(SILENTCMD)$(CC) -x assembler-with-cpp $(ASFLAGS) -c $*.s -o $@ $(ERROR_FILTER)
-    
 #---------------------------------------------------------------------------------
 %_bin.h %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------
