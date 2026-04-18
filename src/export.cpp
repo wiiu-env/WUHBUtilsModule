@@ -28,7 +28,9 @@ WUHBUtilsApiErrorType WUU_MountBundle(const char *name, const char *path, Bundle
     for (const auto &[key, value] : mountedWUHB) {
         if (key == name) {
             if (value == path) {
-                *outRes = 0;
+                if (outRes) {
+                    *outRes = 0;
+                }
                 return WUHB_UTILS_API_ERROR_NONE;
             }
             return WUHB_UTILS_API_ERROR_MOUNT_NAME_TAKEN;
@@ -40,7 +42,9 @@ WUHBUtilsApiErrorType WUU_MountBundle(const char *name, const char *path, Bundle
         mountedWUHB[name] = path;
     }
 
-    *outRes = res;
+    if (outRes) {
+        *outRes = res;
+    }
 
     return WUHB_UTILS_API_ERROR_NONE;
 }
@@ -50,7 +54,7 @@ WUHBUtilsApiErrorType WUU_UnmountBundle(const char *name, int32_t *outRes) {
         return WUHB_UTILS_API_ERROR_INVALID_ARG;
     }
     std::lock_guard<std::mutex> lock(mutex);
-    if (mountedWUHB.count(name) > 0) {
+    if (mountedWUHB.contains(name)) {
         auto res = romfsUnmount(name);
         if (outRes) {
             *outRes = res;
